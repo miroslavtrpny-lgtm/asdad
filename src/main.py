@@ -6,6 +6,7 @@ import time
 from . import bazos, sreality, state as state_mod, tenant
 
 SOURCE_LABELS = {"bazos": "Bazoš.cz", "sreality": "Sreality.cz"}
+NABIDKA_CHUNK_LIMIT = 3500
 
 
 def _format_message(listing: dict, max_price: int) -> str:
@@ -34,15 +35,75 @@ def _resolve_description(listing: dict) -> str:
         return listing.get("description", "")
 
 
+def _reply_nabidka(telegram, token: str, chat_id: str, listings: list, max_price: int) -> None:
+    max_price_fmt = f"{max_price:,}".replace(",", " ")
+    if not listings:
+        telegram.send_message(token, chat_id, f"Aktuálne nie je v ponuke žiadny byt do {max_price_fmt} Kč.")
+        return
+
+    ordered = sorted(listings, key=lambda l: l["price"])
+    header = f"📋 <b>Aktuálne byty do {max_price_fmt} Kč</b> ({len(ordered)} inzerátov):\n\n"
+
+    lines = []
+    for i, listing in enumerate(ordered, 1):
+        price_fmt = f"{listing['price']:,}".replace(",", " ")
+        lines.append(
+            f"{i}. {price_fmt} Kč | {html.escape(listing['dispozice'])} | "
+            f"{html.escape(listing['address'])} | {SOURCE_LABELS[listing['source']]}\n{listing['url']}"
+        )
+
+    chunk = header
+    for line in lines:
+        candidate = f"{chunk}{line}\n\n"
+        if len(candidate) > NABIDKA_CHUNK_LIMIT and chunk != header:
+            telegram.send_message(token, chat_id, chunk.rstrip())
+            time.sleep(1)
+            chunk = f"{line}\n\n"
+        else:
+            chunk = candidate
+    if chunk.strip():
+        telegram.send_message(token, chat_id, chunk.rstrip())
+
+
+def _handle_commands(telegram, token: str, chat_id: str, last_update_id: int, all_listings: list, max_price: int) -> int:
+    try:
+        updates = telegram.get_updates(token, offset=last_update_id + 1)
+    except Exception as exc:  # noqa: BLE001 - never let a Telegram hiccup break the scan
+        print(f"  chyba pri čítaní Telegram príkazov: {exc}", file=sys.stderr)
+        return last_update_id
+
+    new_last_update_id = last_update_id
+    for update in updates:
+        new_last_update_id = max(new_last_update_id, update.get("update_id", new_last_update_id))
+        message = update.get("message") or {}
+        text = (message.get("text") or "").strip()
+        if not text:
+            continue
+        msg_chat_id = str(message.get("chat", {}).get("id", ""))
+        if msg_chat_id != str(chat_id):
+            continue  # ignoruj príkazy z iných chatov, nie je to náš nakonfigurovaný chat
+
+        command = text.split()[0].split("@")[0].lower()
+        if command == "/nabidka":
+            print(f"  prijatý príkaz /nabidka (chat {msg_chat_id})")
+            try:
+                _reply_nabidka(telegram, token, chat_id, all_listings, max_price)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  chyba pri odpovedi na /nabidka: {exc}", file=sys.stderr)
+
+    return new_last_update_id
+
+
 def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    max_price = int(os.environ.get("MAX_PRICE_CZK", "1300000"))
+    max_price = int(os.environ.get("MAX_PRICE_CZK", "1000000"))
 
     from . import telegram  # imported here so a first (priming) run works without credentials
 
     seen, first_run = state_mod.load_state()
-    seen_ids = {source: set(ids) for source, ids in seen.items()}
+    seen_ids = {"bazos": set(seen["bazos"]), "sreality": set(seen["sreality"])}
+    last_update_id = seen.get("last_update_id", 0)
 
     print("Sťahujem inzeráty z Bazoš.cz...")
     bazos_listings = bazos.fetch_listings(max_price)
@@ -54,10 +115,15 @@ def main() -> None:
 
     all_listings = bazos_listings + sreality_listings
 
+    if token and chat_id:
+        last_update_id = _handle_commands(telegram, token, chat_id, last_update_id, all_listings, max_price)
+
     if first_run:
         for listing in all_listings:
             seen_ids[listing["source"]].add(listing["id"])
-        state_mod.save_state({k: sorted(v) for k, v in seen_ids.items()})
+        state_mod.save_state(
+            {"bazos": sorted(seen_ids["bazos"]), "sreality": sorted(seen_ids["sreality"]), "last_update_id": last_update_id}
+        )
         print(
             f"Prvý beh: {len(all_listings)} existujúcich inzerátov označených ako videných, "
             "bez odoslania na Telegram. Od ďalšieho behu prídu už len nové inzeráty."
@@ -88,7 +154,9 @@ def main() -> None:
             print(f"  chyba pri odosielaní na Telegram ({listing['url']}): {exc}", file=sys.stderr)
         time.sleep(1)
 
-    state_mod.save_state({k: sorted(v) for k, v in seen_ids.items()})
+    state_mod.save_state(
+        {"bazos": sorted(seen_ids["bazos"]), "sreality": sorted(seen_ids["sreality"]), "last_update_id": last_update_id}
+    )
     print(f"Hotovo. Nových inzerátov odoslaných na Telegram: {new_count}")
 
 

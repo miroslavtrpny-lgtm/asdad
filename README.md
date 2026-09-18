@@ -17,6 +17,10 @@ dispozíciou, cenou, odkazom a odhadom, či je byt obsadený nájomníkom.
   bez odoslania (inak by prišlo naraz aj niekoľko stoviek správ).
 - `src/main.py` spustí jedno kolo kontroly (nie je to nekonečná slučka) — o
   opakované spúšťanie každých pár minút sa stará GitHub Actions (pozri nižšie).
+- Príkaz **`/nabidka`** napísaný do chatu s botom vypíše všetky aktuálne inzeráty
+  do limitu (zoradené od najlacnejšieho). Keďže bot beží len ako cron úloha
+  raz za pár minút (nie ako stále pripojený proces), odpoveď nepríde okamžite,
+  ale až pri najbližšom behu — pri intervale 5 minút teda **do ~5 minút**.
 
 ## 1. Vytvorenie Telegram bota
 
@@ -68,7 +72,7 @@ Toto je najjednoduchší spôsob bez potreby vlastného servera:
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_CHAT_ID`
 4. Voliteľne v **Settings → Secrets and variables → Actions → Variables** pridaj
-   `MAX_PRICE_CZK` (napr. `1300000`), ak chceš iný limit ako predvolený.
+   `MAX_PRICE_CZK` (napr. `1000000`), ak chceš iný limit ako predvolený.
 5. Workflow `.github/workflows/scan.yml` sa spúšťa automaticky každých 5 minút
    (`workflow_dispatch` ti navyše umožní spustiť ho ručne cez záložku **Actions**
    na vyskúšanie).
@@ -87,7 +91,8 @@ ak chceš pomôcť aj s týmto nastavením.
 
 ## Nastavenie / limity
 
-- Cenový limit: env premenná `MAX_PRICE_CZK` (predvolené `1 300 000`).
+- Cenový limit: env premenná `MAX_PRICE_CZK` (predvolené `1 000 000`), platí
+  rovnako pre nové upozornenia aj pre `/nabidka`.
 - Lokalita: celá Česká republika (bez obmedzenia na kraj/mesto).
 - Adresa pri Bazoši je len mesto + PSC — Bazoš pri bytoch neuvádza ulicu v
   štruktúrovanej podobe, iba niekedy v texte inzerátu.
