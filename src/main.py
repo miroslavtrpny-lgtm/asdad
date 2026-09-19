@@ -97,7 +97,7 @@ def _handle_commands(telegram, token: str, chat_id: str, last_update_id: int, al
 def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    max_price = int(os.environ.get("MAX_PRICE_CZK", "1000000"))
+    max_price = int(os.environ.get("MAX_PRICE_CZK") or "1000000")
 
     from . import telegram  # imported here so a first (priming) run works without credentials
 
