@@ -3,7 +3,7 @@ import os
 import sys
 import time
 
-from . import bazos, bezrealitky, reality_idnes, sreality, state as state_mod, tenant
+from . import bazos, bezrealitky, condition, market, reality_idnes, sreality, state as state_mod, tenant
 
 SOURCES = {
     "bazos": bazos,
@@ -20,17 +20,46 @@ SOURCE_LABELS = {
 NABIDKA_CHUNK_LIMIT = 3500
 
 
+def _fmt_kc(amount: int) -> str:
+    return f"{amount:,}".replace(",", " ")
+
+
+def _format_market_line(market_estimate) -> str:
+    if not market_estimate:
+        return "📊 Odhad hodnoty: neuvedené (nedostatok porovnateľných bytov v okolí)"
+    parts = [f"medián okolia {_fmt_kc(market_estimate['median_price_per_m2'])} Kč/m²"]
+    if market_estimate["estimated_value"]:
+        parts.append(f"odhad ~{_fmt_kc(market_estimate['estimated_value'])} Kč")
+    parts.append(f"z {market_estimate['comps_count']} porovnateľných")
+    return f"📊 Odhad hodnoty: {market_estimate['verdict']} ({', '.join(parts)})"
+
+
+def _format_rent_line(rent_estimate) -> str:
+    if not rent_estimate:
+        return "🏦 Odhad nájmu: neuvedené (nedostatok porovnateľných bytov v okolí)"
+    if "value" in rent_estimate:
+        return f"🏦 Nájom: {_fmt_kc(rent_estimate['value'])} Kč/mesiac ({rent_estimate['source']})"
+    return (
+        f"🏦 Odhad nájmu: {_fmt_kc(rent_estimate['low'])}–{_fmt_kc(rent_estimate['high'])} Kč/mesiac "
+        f"({rent_estimate['source']}, z {rent_estimate['comps_count']} porovnateľných)"
+    )
+
+
 def _format_message(listing: dict, max_price: int) -> str:
-    price_fmt = f"{listing['price']:,}".replace(",", " ")
-    max_price_fmt = f"{max_price:,}".replace(",", " ")
+    price_fmt = _fmt_kc(listing["price"])
+    max_price_fmt = _fmt_kc(max_price)
     return (
         f"🏠 <b>Nový byt do {max_price_fmt} Kč</b> ({SOURCE_LABELS[listing['source']]})\n"
         f"{html.escape(listing['title'])}\n\n"
         f"📍 Adresa: {html.escape(listing['address'])}\n"
         f"📐 Dispozícia: {html.escape(listing['dispozice'])}\n"
         f"💰 Cena: {price_fmt} Kč\n"
-        f"🧑‍🤝‍🧑 Nájomník: {html.escape(listing['tenant'])}\n\n"
-        f"🔗 {listing['url']}"
+        f"🧑‍🤝‍🧑 Nájomník: {html.escape(listing['tenant'])}\n"
+        f"🔧 Stav: {html.escape(listing['condition'])}\n"
+        f"{html.escape(_format_market_line(listing.get('market_estimate')))}\n"
+        f"{html.escape(_format_rent_line(listing.get('rent_estimate')))}\n\n"
+        f"🔗 {listing['url']}\n\n"
+        f"<i>Odhad hodnoty aj nájmu je len orientačný, počítaný z aktuálnych ponúk v okolí (nie skutočná trhová hodnota z katastra).</i>"
     )
 
 
@@ -152,6 +181,18 @@ def main() -> None:
 
         full_description = _resolve_description(listing)
         listing["tenant"] = tenant.detect_tenant(full_description)
+        listing["condition"] = condition.detect_condition(full_description)
+
+        try:
+            listing["market_estimate"] = market.estimate_value(listing)
+        except Exception as exc:  # noqa: BLE001 - odhad je len bonus, nesmie zhodiť beh
+            print(f"  varovanie: odhad hodnoty zlyhal ({listing['url']}): {exc}", file=sys.stderr)
+            listing["market_estimate"] = None
+        try:
+            listing["rent_estimate"] = market.estimate_rent(listing, full_description)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  varovanie: odhad nájmu zlyhal ({listing['url']}): {exc}", file=sys.stderr)
+            listing["rent_estimate"] = None
 
         message = _format_message(listing, max_price)
         try:

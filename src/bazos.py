@@ -17,11 +17,20 @@ HEADERS = {
 
 _DISPOZICE_RE = re.compile(r"([1-6]\s*\+\s*(?:kk|k|[1-6]))", re.IGNORECASE)
 _ID_RE = re.compile(r"/inzerat/(\d+)/")
+_SURFACE_RE = re.compile(r"(\d{1,3}(?:[.,]\d+)?)\s*m(?:2|²)\b", re.IGNORECASE)
 
 
 def _parse_price(text: str):
     digits = re.sub(r"[^\d]", "", text or "")
     return int(digits) if digits else None
+
+
+def _parse_surface(*texts):
+    for text in texts:
+        m = _SURFACE_RE.search(text or "")
+        if m:
+            return round(float(m.group(1).replace(",", ".")))
+    return None
 
 
 def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
@@ -81,6 +90,7 @@ def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
 
             disp_match = _DISPOZICE_RE.search(title) or _DISPOZICE_RE.search(description)
             dispozice = disp_match.group(1).replace(" ", "") if disp_match else "neuvedené"
+            surface_m2 = _parse_surface(title, description)
 
             listings.append(
                 {
@@ -90,6 +100,7 @@ def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
                     "price": price,
                     "address": loc_text or "neuvedené",
                     "dispozice": dispozice,
+                    "surface_m2": surface_m2,
                     "url": BASE_URL + href,
                     "description": description,
                 }

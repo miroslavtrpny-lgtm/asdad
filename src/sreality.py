@@ -77,6 +77,8 @@ def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
 
             dispozice = (r.get("categorySubCb") or {}).get("name", "neuvedené")
             address = _format_address(r.get("locality", {}))
+            price_per_m2 = r.get("priceCzkPerSqM")
+            surface_m2 = round(price / price_per_m2) if price_per_m2 else None
 
             listings.append(
                 {
@@ -85,7 +87,9 @@ def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
                     "title": r.get("name", ""),
                     "price": price,
                     "address": address,
+                    "city": (r.get("locality") or {}).get("city"),
                     "dispozice": dispozice,
+                    "surface_m2": surface_m2,
                     "url": url,
                     "description": "",
                 }

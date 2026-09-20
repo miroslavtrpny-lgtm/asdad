@@ -16,6 +16,7 @@ HEADERS = {
 
 _DISPOZICE_RE = re.compile(r"([1-6]\s*\+\s*(?:kk|k|[1-6]))", re.IGNORECASE)
 _ID_RE = re.compile(r"/detail/[^/]+/[^/]+/[^/]+/([0-9a-f]+)/?$")
+_SURFACE_RE = re.compile(r"(\d{1,3}(?:[.,]\d+)?)\s*m(?:2|²)\b", re.IGNORECASE)
 
 # reality.idnes.cz miesi medzi "byty" aj zahraničné ponuky (Egypt, Bulharsko,
 # Itálie...), ktoré numericky prejdú cenovým filtrom - adresa u nich vždy
@@ -37,6 +38,11 @@ def _parse_price(text: str):
 def _is_foreign(address: str) -> bool:
     lowered = (address or "").lower()
     return any(country in lowered for country in _FOREIGN_COUNTRIES)
+
+
+def _parse_surface(text: str):
+    m = _SURFACE_RE.search(text or "")
+    return round(float(m.group(1).replace(",", "."))) if m else None
 
 
 def fetch_listings(max_price: int, max_pages: int = 1, delay: float = 1.0):
@@ -84,6 +90,7 @@ def fetch_listings(max_price: int, max_pages: int = 1, delay: float = 1.0):
 
             disp_match = _DISPOZICE_RE.search(title)
             dispozice = disp_match.group(1).replace(" ", "") if disp_match else "neuvedené"
+            surface_m2 = _parse_surface(title)
 
             listings.append(
                 {
@@ -93,6 +100,7 @@ def fetch_listings(max_price: int, max_pages: int = 1, delay: float = 1.0):
                     "price": price,
                     "address": address,
                     "dispozice": dispozice,
+                    "surface_m2": surface_m2,
                     "url": href,
                     "description": "",
                 }

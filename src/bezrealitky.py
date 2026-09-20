@@ -93,6 +93,7 @@ def fetch_listings(max_price: int, max_pages: int = 10, delay: float = 1.0):
                     "price": price,
                     "address": address,
                     "dispozice": dispozice,
+                    "surface_m2": advert.get("surface"),
                     "url": f"{BASE_URL}{DETAIL_PATH}/{uri}",
                     "description": "",
                 }
