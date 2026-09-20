@@ -3,7 +3,7 @@ from pathlib import Path
 
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "data" / "seen.json"
 MAX_KEEP_PER_SOURCE = 6000
-DEFAULT_SOURCES = ("bazos", "sreality", "bezrealitky")
+DEFAULT_SOURCES = ("bazos", "sreality", "bezrealitky", "reality_idnes")
 
 
 def load_state(path=DEFAULT_PATH, sources=DEFAULT_SOURCES):

@@ -3,17 +3,19 @@ import os
 import sys
 import time
 
-from . import bazos, bezrealitky, sreality, state as state_mod, tenant
+from . import bazos, bezrealitky, reality_idnes, sreality, state as state_mod, tenant
 
 SOURCES = {
     "bazos": bazos,
     "sreality": sreality,
     "bezrealitky": bezrealitky,
+    "reality_idnes": reality_idnes,
 }
 SOURCE_LABELS = {
     "bazos": "Bazoš.cz",
     "sreality": "Sreality.cz",
     "bezrealitky": "Bezrealitky.cz",
+    "reality_idnes": "Reality.iDNES.cz",
 }
 NABIDKA_CHUNK_LIMIT = 3500
 
