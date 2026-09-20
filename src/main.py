@@ -3,9 +3,18 @@ import os
 import sys
 import time
 
-from . import bazos, sreality, state as state_mod, tenant
+from . import bazos, bezrealitky, sreality, state as state_mod, tenant
 
-SOURCE_LABELS = {"bazos": "Bazoš.cz", "sreality": "Sreality.cz"}
+SOURCES = {
+    "bazos": bazos,
+    "sreality": sreality,
+    "bezrealitky": bezrealitky,
+}
+SOURCE_LABELS = {
+    "bazos": "Bazoš.cz",
+    "sreality": "Sreality.cz",
+    "bezrealitky": "Bezrealitky.cz",
+}
 NABIDKA_CHUNK_LIMIT = 3500
 
 
@@ -25,10 +34,8 @@ def _format_message(listing: dict, max_price: int) -> str:
 
 def _resolve_description(listing: dict) -> str:
     try:
-        if listing["source"] == "bazos":
-            full = bazos.fetch_full_description(listing["url"])
-        else:
-            full = sreality.fetch_full_description(listing["url"])
+        module = SOURCES[listing["source"]]
+        full = module.fetch_full_description(listing["url"])
         return full or listing.get("description", "")
     except Exception as exc:  # noqa: BLE001 - best effort, never let this break the run
         print(f"  varovanie: nepodarilo sa načítať detail {listing['url']}: {exc}", file=sys.stderr)
@@ -101,19 +108,17 @@ def main() -> None:
 
     from . import telegram  # imported here so a first (priming) run works without credentials
 
-    seen, first_run = state_mod.load_state()
-    seen_ids = {"bazos": set(seen["bazos"]), "sreality": set(seen["sreality"])}
+    source_names = tuple(SOURCES.keys())
+    seen, first_run = state_mod.load_state(sources=source_names)
+    seen_ids = {name: set(seen[name]) for name in source_names}
     last_update_id = seen.get("last_update_id", 0)
 
-    print("Sťahujem inzeráty z Bazoš.cz...")
-    bazos_listings = bazos.fetch_listings(max_price)
-    print(f"  nájdených {len(bazos_listings)} inzerátov do {max_price} Kč")
-
-    print("Sťahujem inzeráty zo Sreality.cz...")
-    sreality_listings = sreality.fetch_listings(max_price)
-    print(f"  nájdených {len(sreality_listings)} inzerátov do {max_price} Kč")
-
-    all_listings = bazos_listings + sreality_listings
+    all_listings = []
+    for name, module in SOURCES.items():
+        print(f"Sťahujem inzeráty z {SOURCE_LABELS[name]}...")
+        listings = module.fetch_listings(max_price)
+        print(f"  nájdených {len(listings)} inzerátov do {max_price} Kč")
+        all_listings.extend(listings)
 
     if token and chat_id:
         last_update_id = _handle_commands(telegram, token, chat_id, last_update_id, all_listings, max_price)
@@ -121,9 +126,9 @@ def main() -> None:
     if first_run:
         for listing in all_listings:
             seen_ids[listing["source"]].add(listing["id"])
-        state_mod.save_state(
-            {"bazos": sorted(seen_ids["bazos"]), "sreality": sorted(seen_ids["sreality"]), "last_update_id": last_update_id}
-        )
+        state_to_save = {name: sorted(ids) for name, ids in seen_ids.items()}
+        state_to_save["last_update_id"] = last_update_id
+        state_mod.save_state(state_to_save, sources=source_names)
         print(
             f"Prvý beh: {len(all_listings)} existujúcich inzerátov označených ako videných, "
             "bez odoslania na Telegram. Od ďalšieho behu prídu už len nové inzeráty."
@@ -154,9 +159,9 @@ def main() -> None:
             print(f"  chyba pri odosielaní na Telegram ({listing['url']}): {exc}", file=sys.stderr)
         time.sleep(1)
 
-    state_mod.save_state(
-        {"bazos": sorted(seen_ids["bazos"]), "sreality": sorted(seen_ids["sreality"]), "last_update_id": last_update_id}
-    )
+    state_to_save = {name: sorted(ids) for name, ids in seen_ids.items()}
+    state_to_save["last_update_id"] = last_update_id
+    state_mod.save_state(state_to_save, sources=source_names)
     print(f"Hotovo. Nových inzerátov odoslaných na Telegram: {new_count}")
 
 
