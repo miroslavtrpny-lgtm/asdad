@@ -18,9 +18,10 @@ import requests
 from . import sreality
 
 MIN_COMPS = 3
-MAX_COMP_PAGES = 3
+MAX_COMP_PAGES = 6
 
 _OKRES_RE = re.compile(r"okres\s+([^,]+)", re.IGNORECASE)
+_PRAHA_DISTRICT_RE = re.compile(r"\bpraha[\s-]*(\d{1,2})\b", re.IGNORECASE)
 _RENT_IN_DESCRIPTION_RE = re.compile(
     r"(?:n[aá]jem(?:n[eé])?|pron[aá]jem)[^.\n]{0,25}?([\d][\d\s]{2,6})\s*K[cč]",
     re.IGNORECASE,
@@ -37,6 +38,11 @@ def _slugify(text: str) -> str:
 
 def _locality_slug(listing: dict):
     address = listing.get("address") or ""
+    # Praha je príliš veľká na to, aby "praha" ako celok dávalo zmysluplné
+    # porovnanie cien - ak vieme číslo mestskej časti, zúžime na tú.
+    praha_match = _PRAHA_DISTRICT_RE.search(address)
+    if praha_match:
+        return f"praha-{praha_match.group(1)}"
     city = listing.get("city")
     if city:
         return _slugify(city)

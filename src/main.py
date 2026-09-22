@@ -45,11 +45,15 @@ def _format_rent_line(rent_estimate) -> str:
     )
 
 
-def _format_message(listing: dict, max_price: int) -> str:
+def _format_price_range(min_price: int, max_price: int) -> str:
+    return f"od {_fmt_kc(min_price)} do {_fmt_kc(max_price)} Kč" if min_price else f"do {_fmt_kc(max_price)} Kč"
+
+
+def _format_message(listing: dict, min_price: int, max_price: int) -> str:
     price_fmt = _fmt_kc(listing["price"])
-    max_price_fmt = _fmt_kc(max_price)
+    range_fmt = _format_price_range(min_price, max_price)
     return (
-        f"🏠 <b>Nový byt do {max_price_fmt} Kč</b> ({SOURCE_LABELS[listing['source']]})\n"
+        f"🏠 <b>Nový byt {range_fmt}</b> ({SOURCE_LABELS[listing['source']]})\n"
         f"{html.escape(listing['title'])}\n\n"
         f"📍 Adresa: {html.escape(listing['address'])}\n"
         f"📐 Dispozícia: {html.escape(listing['dispozice'])}\n"
@@ -73,14 +77,14 @@ def _resolve_description(listing: dict) -> str:
         return listing.get("description", "")
 
 
-def _reply_nabidka(telegram, token: str, chat_id: str, listings: list, max_price: int) -> None:
-    max_price_fmt = f"{max_price:,}".replace(",", " ")
+def _reply_nabidka(telegram, token: str, chat_id: str, listings: list, min_price: int, max_price: int) -> None:
+    range_fmt = _format_price_range(min_price, max_price)
     if not listings:
-        telegram.send_message(token, chat_id, f"Aktuálne nie je v ponuke žiadny byt do {max_price_fmt} Kč.")
+        telegram.send_message(token, chat_id, f"Aktuálne nie je v ponuke žiadny byt {range_fmt}.")
         return
 
     ordered = sorted(listings, key=lambda l: l["price"])
-    header = f"📋 <b>Aktuálne byty do {max_price_fmt} Kč</b> ({len(ordered)} inzerátov):\n\n"
+    header = f"📋 <b>Aktuálne byty {range_fmt}</b> ({len(ordered)} inzerátov):\n\n"
 
     lines = []
     for i, listing in enumerate(ordered, 1):
@@ -103,7 +107,7 @@ def _reply_nabidka(telegram, token: str, chat_id: str, listings: list, max_price
         telegram.send_message(token, chat_id, chunk.rstrip())
 
 
-def _handle_commands(telegram, token: str, chat_id: str, last_update_id: int, all_listings: list, max_price: int) -> int:
+def _handle_commands(telegram, token: str, chat_id: str, last_update_id: int, all_listings: list, min_price: int, max_price: int) -> int:
     try:
         updates = telegram.get_updates(token, offset=last_update_id + 1)
     except Exception as exc:  # noqa: BLE001 - never let a Telegram hiccup break the scan
@@ -125,7 +129,7 @@ def _handle_commands(telegram, token: str, chat_id: str, last_update_id: int, al
         if command == "/nabidka":
             print(f"  prijatý príkaz /nabidka (chat {msg_chat_id})")
             try:
-                _reply_nabidka(telegram, token, chat_id, all_listings, max_price)
+                _reply_nabidka(telegram, token, chat_id, all_listings, min_price, max_price)
             except Exception as exc:  # noqa: BLE001
                 print(f"  chyba pri odpovedi na /nabidka: {exc}", file=sys.stderr)
 
@@ -136,6 +140,7 @@ def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     max_price = int(os.environ.get("MAX_PRICE_CZK") or "1000000")
+    min_price = int(os.environ.get("MIN_PRICE_CZK") or "600000")
 
     from . import telegram  # imported here so a first (priming) run works without credentials
 
@@ -147,12 +152,12 @@ def main() -> None:
     all_listings = []
     for name, module in SOURCES.items():
         print(f"Sťahujem inzeráty z {SOURCE_LABELS[name]}...")
-        listings = module.fetch_listings(max_price)
-        print(f"  nájdených {len(listings)} inzerátov do {max_price} Kč")
+        listings = module.fetch_listings(max_price, min_price=min_price)
+        print(f"  nájdených {len(listings)} inzerátov od {min_price} do {max_price} Kč")
         all_listings.extend(listings)
 
     if token and chat_id:
-        last_update_id = _handle_commands(telegram, token, chat_id, last_update_id, all_listings, max_price)
+        last_update_id = _handle_commands(telegram, token, chat_id, last_update_id, all_listings, min_price, max_price)
 
     if first_run:
         for listing in all_listings:
@@ -194,7 +199,7 @@ def main() -> None:
             print(f"  varovanie: odhad nájmu zlyhal ({listing['url']}): {exc}", file=sys.stderr)
             listing["rent_estimate"] = None
 
-        message = _format_message(listing, max_price)
+        message = _format_message(listing, min_price, max_price)
         try:
             telegram.send_message(token, chat_id, message)
             new_count += 1

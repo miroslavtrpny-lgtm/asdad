@@ -33,8 +33,8 @@ def _parse_surface(*texts):
     return None
 
 
-def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
-    """Scrapes reality.bazos.cz/prodam/byt/ filtered to price <= max_price,
+def fetch_listings(max_price: int, min_price: int = 0, max_pages: int = 20, delay: float = 1.0):
+    """Scrapes reality.bazos.cz/prodam/byt/ filtered to min_price <= price <= max_price,
     across the whole Czech Republic. Returns a list of dicts."""
     listings = []
     offset = 0
@@ -44,7 +44,7 @@ def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
             "rubriky": "reality",
             "hlokalita": "",
             "humkreis": 0,
-            "cenaod": "",
+            "cenaod": min_price or "",
             "cenado": max_price,
             "Submit": "Hledat",
             "order": "",
@@ -79,7 +79,8 @@ def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
             price = _parse_price(price_el.get_text() if price_el else "")
             # skutočný byt sa reálne neinzeruje pod ~50 000 Kč - nižšie ceny sú
             # symbolické (výmena, dohodou a pod.), preto ich preskočíme
-            if price is None or price < 50_000 or price > max_price:
+            floor = max(min_price, 50_000)
+            if price is None or price < floor or price > max_price:
                 continue
 
             loc_el = card.select_one(".inzeratylok")

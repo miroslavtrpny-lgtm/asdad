@@ -41,14 +41,16 @@ def _format_address(locality: dict) -> str:
     return ", ".join(parts) if parts else "neuvedené"
 
 
-def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
+def fetch_listings(max_price: int, min_price: int = 0, max_pages: int = 20, delay: float = 1.0):
     """Scrapes sreality.cz search results (sale, flats) filtered to
-    price <= max_price, across the whole Czech Republic (default locality
-    scope of sreality.cz). Returns a list of dicts."""
+    min_price <= price <= max_price, across the whole Czech Republic (default
+    locality scope of sreality.cz). Returns a list of dicts."""
     listings = []
     page = 1
     while page <= max_pages:
         params = {"cena-do": max_price, "strana": page}
+        if min_price:
+            params["cena-od"] = min_price
         resp = requests.get(BASE_URL + SEARCH_PATH, params=params, headers=HEADERS, timeout=20)
         resp.raise_for_status()
         html = resp.text
@@ -69,7 +71,7 @@ def fetch_listings(max_price: int, max_pages: int = 20, delay: float = 1.0):
 
         for r in results:
             price = r.get("priceCzk")
-            if not price or price <= 0 or price > max_price:
+            if not price or price < min_price or price > max_price:
                 continue
             listing_id = str(r["id"])
             href = id_to_href.get(listing_id)

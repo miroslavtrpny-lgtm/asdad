@@ -45,15 +45,17 @@ def _parse_surface(text: str):
     return round(float(m.group(1).replace(",", "."))) if m else None
 
 
-def fetch_listings(max_price: int, max_pages: int = 1, delay: float = 1.0):
+def fetch_listings(max_price: int, min_price: int = 0, max_pages: int = 1, delay: float = 1.0):
     """Scrapes reality.idnes.cz search results (sale, flats) filtered to
-    price <= max_price. iDNES doesn't reliably paginate this search (the
-    `str` page parameter has no effect once results fit on one page), so
-    for the price ranges this bot targets a single page already covers the
-    full result set."""
+    min_price <= price <= max_price. iDNES doesn't reliably paginate this
+    search (the `str` page parameter has no effect once results fit on one
+    page), so for the price ranges this bot targets a single page already
+    covers the full result set."""
     listings = []
     for page in range(1, max_pages + 1):
         params = {"f[priceMax]": max_price}
+        if min_price:
+            params["f[priceMin]"] = min_price
         if page > 1:
             params["str"] = page
         resp = requests.get(BASE_URL + SEARCH_PATH, params=params, headers=HEADERS, timeout=20)
@@ -85,7 +87,8 @@ def fetch_listings(max_price: int, max_pages: int = 1, delay: float = 1.0):
 
             price_el = card.select_one("p.c-products__price strong")
             price = _parse_price(price_el.get_text() if price_el else "")
-            if price is None or price < 50_000 or price > max_price:
+            floor = max(min_price, 50_000)
+            if price is None or price < floor or price > max_price:
                 continue
 
             disp_match = _DISPOZICE_RE.search(title)

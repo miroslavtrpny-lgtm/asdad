@@ -45,15 +45,17 @@ def _find_list_query(root_query: dict):
     return None
 
 
-def fetch_listings(max_price: int, max_pages: int = 10, delay: float = 1.0):
+def fetch_listings(max_price: int, min_price: int = 0, max_pages: int = 10, delay: float = 1.0):
     """Scrapes bezrealitky.cz search results (sale, flats), filtered to
-    price <= max_price. Only keeps CZK-priced listings, since the site
-    also syndicates foreign (mostly German) partner listings that pass the
-    numeric price filter but are irrelevant here."""
+    min_price <= price <= max_price. Only keeps CZK-priced listings, since
+    the site also syndicates foreign (mostly German) partner listings that
+    pass the numeric price filter but are irrelevant here."""
     listings = []
     page = 1
     while page <= max_pages:
         params = {"offerType": "PRODEJ", "estateType": "BYT", "priceTo": max_price, "page": page}
+        if min_price:
+            params["priceFrom"] = min_price
         resp = requests.get(BASE_URL + SEARCH_PATH, params=params, headers=HEADERS, timeout=20)
         resp.raise_for_status()
         data = _extract_next_data(resp.text)
@@ -78,7 +80,8 @@ def fetch_listings(max_price: int, max_pages: int = 10, delay: float = 1.0):
             if advert.get("currency") != "CZK":
                 continue  # zahraničný/partnerský inzerát v inej mene
             price = advert.get("price")
-            if not price or price < 50_000 or price > max_price:
+            floor = max(min_price, 50_000)
+            if not price or price < floor or price > max_price:
                 continue
 
             uri = advert.get("uri", advert_id)
