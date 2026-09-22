@@ -29,6 +29,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MAX_PRICE_CZK: ${{ vars.MAX_PRICE_CZK }}
+          MIN_PRICE_CZK: ${{ vars.MIN_PRICE_CZK }}
 
       - name: Uložiť stav (seen.json)
         run: |
